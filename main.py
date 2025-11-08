@@ -1,20 +1,24 @@
+import telebot
+import requests
 import os
-import asyncio
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import random
 from datetime import datetime, timedelta
 from collections import defaultdict
-import requests
+from telebot import types
 
-TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
-AI_URL = "https://api.polinations.ai/video"  # Free AI service
-bot = Bot(token=TOKEN)
-dp = Dispatcher(bot)
+bot = telebot.TeleBot(BOT_TOKEN)
 
-user_data = defaultdict(lambda: {"count": 0, "coins": 0, "ref": None, "last_reset": datetime.now()})
-channels = []
+user_data = defaultdict(lambda: {
+    "count": 0, 
+    "coins": 0, 
+    "photo": None, 
+    "referrals": 0,
+    "last_reset": datetime.now(),
+    "invited_by": None
+})
+channels = ["@your_channel"]
 
 def reset_limits():
     for user in user_data:
@@ -22,101 +26,117 @@ def reset_limits():
             user_data[user]["count"] = 0
             user_data[user]["last_reset"] = datetime.now()
 
-def generate_ref_link(user_id):
-    return f"https://t.me/{bot.username}?start={user_id}"
-
-@dp.message_handler(commands=["start"])
-async def start(msg: types.Message):
+@bot.message_handler(commands=["start"])
+def start(message):
     reset_limits()
-    user_id = msg.from_user.id
-    args = msg.get_args()
+    user_id = message.from_user.id
 
-    if args and args.isdigit() and int(args) != user_id:
-        if user_data[user_id]["ref"] is None:
-            referrer = int(args)
-            user_data[user_id]["ref"] = referrer
-            user_data[referrer]["coins"] += 100
-            await bot.send_message(referrer, f"🎉 Sizning referalingiz yangi foydalanuvchi qo‘shdi!\n💰 100 coin qo‘shildi.")
+    args = message.text.split()
+    if len(args) > 1:
+        inviter_id = int(args[1])
+        if inviter_id != user_id and inviter_id in user_data and user_data[user_id]["invited_by"] is None:
+            user_data[user_id]["invited_by"] = inviter_id
+            user_data[inviter_id]["coins"] += 100
+            user_data[inviter_id]["referrals"] += 1
+            bot.send_message(inviter_id, "🎉 Sizga 100 coin qo‘shildi! Yangi referal qo‘shildi.")
 
     if user_id == ADMIN_ID:
-        btns = InlineKeyboardMarkup().add(
-            InlineKeyboardButton("📊 Statistika", callback_data="stats"),
-            InlineKeyboardButton("📢 Reklama", callback_data="send_ads"),
-            InlineKeyboardButton("🔗 Kanal sozlash", callback_data="set_channel")
-        )
-        await msg.answer("👋 Salom, admin panelga xush kelibsiz!", reply_markup=btns)
+        admin_menu(message)
     else:
-        kb = InlineKeyboardMarkup().add(
-            InlineKeyboardButton("🪄 Rasm jonlantirish", callback_data="animate"),
-            InlineKeyboardButton("👤 Hisobim", callback_data="account"),
-            InlineKeyboardButton("🎁 Referal", callback_data="ref")
-        )
-        await msg.answer("👋 Salom! Men rasmni jonlantiruvchi botman.\nRasm yuboring va natijani oling!", reply_markup=kb)
+        user_menu(message)
 
-@dp.callback_query_handler(lambda c: c.data == "account")
-async def account_info(call: types.CallbackQuery):
-    data = user_data[call.from_user.id]
-    await call.message.answer(
-        f"📊 Sizning hisobingiz:\n\n💰 Coin: {data['coins']}\n🎞️ Bugungi limit: {data['count']}/3\n\nReferal link:\n{generate_ref_link(call.from_user.id)}"
-    )
+def admin_menu(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("📊 Statistika", "📢 Reklama yuborish", "➕ Kanal qo‘shish", "➖ Kanal o‘chirish")
+    bot.send_message(message.chat.id, "👑 Admin paneliga xush kelibsiz!", reply_markup=markup)
 
-@dp.callback_query_handler(lambda c: c.data == "ref")
-async def ref_system(call: types.CallbackQuery):
-    link = generate_ref_link(call.from_user.id)
-    await call.message.answer(f"🎁 Do‘stlaringizni taklif qiling va har bir faol foydalanuvchi uchun 100 coin oling!\n\n🔗 Sizning havolangiz:\n{link}")
+def user_menu(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("🎥 Video yaratish", "💰 Hisobim", "👥 Referallar", "💡 Yordam")
+    bot.send_message(message.chat.id, "👋 Salom! Quyidagi menyudan tanlang:", reply_markup=markup)
 
-@dp.callback_query_handler(lambda c: c.data == "animate")
-async def ask_photo(call: types.CallbackQuery):
-    await call.message.answer("🖼️ Rasm yuboring (jpg/png)...")
-
-@dp.message_handler(content_types=["photo"])
-async def handle_photo(msg: types.Message):
-    user_id = msg.from_user.id
-    if user_id != ADMIN_ID and user_data[user_id]["count"] >= 3 and user_data[user_id]["coins"] < 150:
-        await msg.answer("🚫 Sizning bugungi limingiz tugagan va yetarli coin yo‘q.")
+@bot.message_handler(func=lambda m: m.text == "📊 Statistika")
+def statistika(message):
+    if message.from_user.id != ADMIN_ID:
         return
+    total_users = len(user_data)
+    total_videos = sum(u["count"] for u in user_data.values())
+    total_coins = sum(u["coins"] for u in user_data.values())
+    bot.send_message(message.chat.id, f"📈 Foydalanuvchilar: {total_users}\n🎬 Videolar: {total_videos}\n💰 Coinlar: {total_coins}")
 
-    await msg.answer("✍️ Endi rasm uchun prompt (tasvir tavsifi) kiriting:")
-    user_data[user_id]["photo"] = msg.photo[-1].file_id
+@bot.message_handler(func=lambda m: m.text == "📢 Reklama yuborish")
+def reklama_start(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    bot.send_message(message.chat.id, "✍️ Reklama matnini yuboring:")
+    bot.register_next_step_handler(message, reklama_yuborish)
 
-@dp.message_handler(lambda m: m.text and "photo" in user_data[m.from_user.id])
-async def handle_prompt(msg: types.Message):
-    user_id = msg.from_user.id
-    photo_id = user_data[user_id]["photo"]
-    prompt = msg.text
-    del user_data[user_id]["photo"]
+def reklama_yuborish(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    sent = 0
+    for uid in user_data:
+        try:
+            bot.send_message(uid, message.text)
+            sent += 1
+        except:
+            pass
+    bot.send_message(message.chat.id, f"✅ {sent} ta foydalanuvchiga reklama yuborildi.")
 
-    await msg.answer("⏳ AI orqali video tayyorlanmoqda...")
+@bot.message_handler(func=lambda m: m.text == "🎥 Video yaratish")
+def video_start(message):
+    user_id = message.from_user.id
+    reset_limits()
+    limit = 3 + (user_data[user_id]["coins"] // 150)
+    if user_id != ADMIN_ID and user_data[user_id]["count"] >= limit:
+        bot.send_message(user_id, "🚫 Limit tugagan. Referal orqali coin to‘plang yoki ertaga urinib ko‘ring.")
+        return
+    bot.send_message(user_id, "📸 Rasm yuboring:")
+    bot.register_next_step_handler(message, rasm_qabul)
 
-    # Fake API simulation (Polinations AI video)
-    response = requests.get(f"https://image.pollinations.ai/prompt/{prompt}")
-    if response.status_code == 200:
-        await msg.answer_video(response.url, caption=f"🎬 Natija: {prompt}")
-    else:
-        await msg.answer("⚠️ AI bilan aloqa vaqtida xatolik yuz berdi. Keyinroq urinib ko‘ring.")
+def rasm_qabul(message):
+    if not message.photo:
+        bot.send_message(message.chat.id, "⚠️ Iltimos, rasm yuboring.")
+        return
+    user_id = message.from_user.id
+    file_info = bot.get_file(message.photo[-1].file_id)
+    file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
+    user_data[user_id]["photo"] = file_url
+    bot.send_message(user_id, "✍️ Endi tavsif yozing:")
+    bot.register_next_step_handler(message, prompt_qabul)
 
+def prompt_qabul(message):
+    user_id = message.from_user.id
+    if not user_data[user_id]["photo"]:
+        bot.send_message(user_id, "⚠️ Avval rasm yuboring.")
+        return
+    prompt = message.text
+    bot.send_message(user_id, "🎨 AI video tayyorlanmoqda, biroz kuting...")
+    try:
+        effect = random.choice(["zoom", "move", "wave", "float"])
+        api = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
+        img = requests.get(api).content
+        bot.send_video(user_id, img, caption=f"🎬 {prompt}\n✨ Effekt: {effect}")
+    except Exception as e:
+        bot.send_message(user_id, f"⚠️ Xatolik: {e}")
     if user_id != ADMIN_ID:
         user_data[user_id]["count"] += 1
-        if user_data[user_id]["count"] > 3:
-            user_data[user_id]["coins"] -= 150
+    user_data[user_id]["photo"] = None
 
-@dp.callback_query_handler(lambda c: c.data == "stats" and c.from_user.id == ADMIN_ID)
-async def show_stats(call: types.CallbackQuery):
-    total_users = len(user_data)
-    total_refs = sum(1 for u in user_data.values() if u["ref"])
-    await call.message.answer(f"📈 Foydalanuvchilar: {total_users}\n👥 Referallar: {total_refs}")
+@bot.message_handler(func=lambda m: m.text == "💰 Hisobim")
+def hisobim(message):
+    user = user_data[message.from_user.id]
+    limit = 3 + (user["coins"] // 150)
+    bot.send_message(message.chat.id, f"💰 Coinlar: {user['coins']}\n🎞 Bugungi video: {user['count']}/{limit}")
 
-@dp.callback_query_handler(lambda c: c.data == "send_ads" and c.from_user.id == ADMIN_ID)
-async def send_ads(call: types.CallbackQuery):
-    await call.message.answer("✍️ Reklama matnini kiriting:")
-    @dp.message_handler()
-    async def get_ad(msg: types.Message):
-        for user in user_data:
-            try:
-                await bot.send_message(user, msg.text)
-            except:
-                pass
-        await msg.answer("✅ Reklama yuborildi.")
+@bot.message_handler(func=lambda m: m.text == "👥 Referallar")
+def referallar(message):
+    user = user_data[message.from_user.id]
+    ref_link = f"https://t.me/{bot.get_me().username}?start={message.from_user.id}"
+    bot.send_message(message.chat.id, f"👥 Referallar: {user['referrals']}\n💰 1 referal = 100 coin\n🔗 Havola: {ref_link}")
 
-if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True)
+@bot.message_handler(func=lambda m: m.text == "💡 Yordam")
+def yordam(message):
+    bot.send_message(message.chat.id, "📘 Botdan foydalanish uchun:\n1. 🎥 Rasm yuboring\n2. Tavsif yozing\n3. AI video tayyorlaydi\n\n💰 Referal orqali coin to‘plang!")
+
+bot.polling(none_stop=True)
