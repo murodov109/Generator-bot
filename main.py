@@ -5,65 +5,57 @@ import os
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 
-participant_count = 0
+participants = []
 
 @bot.message_handler(commands=['start'])
 def start_message(message):
     text = (
-        "🎉 *Konkurs botiga xush kelibsiz!*\n\n"
-        "Bu bot sizga kanalingizda reaksiya asosida *battle* o‘tkazishga yordam beradi.\n\n"
-        "⚙️ *Qanday ishlaydi:*\n"
+        "🎉 <b>Konkurs botiga xush kelibsiz!</b>\n\n"
+        "📋 Bu bot sizga kanal orqali konkurs (battle) o‘tkazishda yordam beradi.\n\n"
+        "⚙️ <b>Qanday ishlaydi:</b>\n"
         "1️⃣ Botni kanalga admin sifatida qo‘shing.\n"
-        "2️⃣ Kanalda `#batle` deb yozing.\n"
-        "3️⃣ Bot avtomatik konkurs postini yuboradi.\n"
-        "4️⃣ Foydalanuvchilar 'Qatnashish' tugmasini bossalar, "
-        "bot ularning ismini kanalga chiqadi.\n\n"
-        "📜 *Post tahrir qilinsa ham bot ishlayveradi.*\n"
-        "⚠️ Nakrutka, spam yoki firibgarlik aniqlansa ban qilinadi!\n\n"
+        "2️⃣ Kanalda <code>#batle</code> so‘zini yozing.\n"
+        "3️⃣ Bot konkurs postini avtomatik joylaydi.\n"
+        "4️⃣ Foydalanuvchilar 'Qatnashish' tugmasini bosganda ismlari chiqadi.\n\n"
+        "🛠 Post tahrir qilinganda ham bot ishlayveradi.\n\n"
+        "🚫 Nakrutka / spam / ban sababli ishtirokchi chiqariladi.\n\n"
         "👇 Quyidagi tugma orqali botni kanalga qo‘shing:"
     )
     btn = types.InlineKeyboardMarkup()
-    add_channel = types.InlineKeyboardButton(
-        text="➕ KANALGA QO‘SHISH", url=f"https://t.me/{bot.get_me().username}?startchannel=true"
+    btn.add(
+        types.InlineKeyboardButton(
+            "➕ KANALGA QO‘SHISH",
+            url=f"https://t.me/{bot.get_me().username}?startchannel=true"
+        )
     )
-    btn.add(add_channel)
-    bot.send_message(message.chat.id, text, reply_markup=btn, parse_mode="Markdown")
+    bot.send_message(message.chat.id, text, reply_markup=btn)
 
-@bot.message_handler(func=lambda m: m.text and "#batle" in m.text.lower())
+@bot.message_handler(func=lambda m: m.chat.type in ["supergroup", "channel"] and "#batle" in m.text.lower())
 def start_battle(message):
-    if message.chat.type not in ["supergroup", "channel"]:
-        return
     caption = (
-        "🏆 #KONKURS BOSHLANDI 🥳\n\n"
-        "📋 *Konkurs shartlari:* Kanal postini o‘qib, qatnashing!\n"
-        "🎁 *Sovg‘alar:* Admin tomonidan belgilanadi.\n\n"
-        "📊 Ball tizimi:\n"
-        "⭐ Reaksiya: 1 ball\n"
-        "💫 Stars: 3 ball\n"
-        "🚀 Boost: 5 ball\n\n"
-        "📢 Battle o‘tkaziladigan kanal:\n"
-        f"👉 @{message.chat.username}\n\n"
-        "Nakrutka, spam — ban ❌"
+        "🏆 <b>KONKURS BOSHLANDI!</b>\n\n"
+        "🎁 Sovg‘alar va shartlarni admin tahrir qilishi mumkin.\n\n"
+        "⚠️ Nakrutka yoki spam aniqlansa — ban!\n\n"
+        "👇 Quyidagi tugma orqali qatnashing:"
     )
-    join_btn = types.InlineKeyboardMarkup()
-    join_btn.add(types.InlineKeyboardButton("🟢 Qatnashish", callback_data="join_battle"))
-    bot.send_message(message.chat.id, caption, reply_markup=join_btn, parse_mode="Markdown")
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🟢 Qatnashish", callback_data="join"))
+    bot.send_message(message.chat.id, caption, reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: call.data == "join_battle")
-def join_battle(call):
-    global participant_count
-    participant_count += 1
-    username = call.from_user.username or call.from_user.first_name
-    text = (
-        f"{participant_count} - @{username}\n"
-        "Stars 3 Ball ⭐\n"
-        "Reaksiya 1 Ball 🙊\n"
-        "Boost 5 Ball 💫\n\n"
-        "OMAD 🍀"
-    )
-    bot.send_message(call.message.chat.id, text)
+@bot.callback_query_handler(func=lambda c: c.data == "join")
+def join_user(call):
+    user = call.from_user
+    username = f"@{user.username}" if user.username else user.first_name
+
+    if username not in participants:
+        participants.append(username)
+        count = len(participants)
+        msg = f"{count} - {username}\nOMAD 🍀"
+        bot.send_message(call.message.chat.id, msg)
+    else:
+        bot.answer_callback_query(call.id, "Siz allaqachon qatnashgansiz ✅", show_alert=True)
 
 @bot.message_handler(commands=['admin'])
 def admin_panel(message):
@@ -76,16 +68,16 @@ def admin_panel(message):
 @bot.message_handler(func=lambda m: m.text == "📢 Reklama yuborish")
 def send_ads(message):
     if message.from_user.id == ADMIN_ID:
-        bot.send_message(message.chat.id, "✍️ Reklama xabarini yuboring:")
+        bot.send_message(message.chat.id, "✍️ Reklama matnini yuboring:")
         bot.register_next_step_handler(message, broadcast_message)
 
 def broadcast_message(message):
     if message.from_user.id != ADMIN_ID:
         return
-    bot.send_message(ADMIN_ID, "✅ Reklama foydalanuvchilarga yuborildi.")
+    bot.send_message(ADMIN_ID, "✅ Reklama yuborish faqat foydalanuvchilar uchun yo‘lga qo‘yilgan.")
 
 @bot.message_handler(func=lambda m: m.text == "📊 Statistika")
 def stats(message):
-    bot.send_message(message.chat.id, f"👥 Jami qatnashuvchilar: {participant_count} ta.")
+    bot.send_message(message.chat.id, f"👥 Qatnashuvchilar soni: {len(participants)} ta")
 
 bot.polling(non_stop=True)
