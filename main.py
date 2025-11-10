@@ -16,9 +16,9 @@ def start_message(message):
         "Bu bot sizga kanalingizda reaksiya asosida *battle* o‘tkazishga yordam beradi.\n\n"
         "⚙️ *Qanday ishlaydi:*\n"
         "1️⃣ Botni kanalga admin sifatida qo‘shing.\n"
-        "2️⃣ Kanalda `!batle` deb yozing.\n"
+        "2️⃣ Kanalda `#batle` deb yozing.\n"
         "3️⃣ Bot avtomatik konkurs postini yuboradi.\n"
-        "4️⃣ Foydalanuvchilar 'Qatnashish' tugmasini bossalar, "
+        "4️⃣ Foydalanuvchilar 'Qo'shilish' tugmasini bossalar, "
         "bot ularning ismini kanalga chiqadi.\n\n"
         "📜 *Postni tahrirlasangiz ham bot ishlayveradi.*\n"
         "⚠️ Nakrutka, spam yoki firibgarlik aniqlansa ban qilinadi!\n\n"
@@ -32,7 +32,7 @@ def start_message(message):
     btn.add(add_channel)
     bot.send_message(message.chat.id, text, reply_markup=btn, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda m: m.text and m.text.lower() == "!batle")
+@bot.message_handler(func=lambda m: m.text and m.text.lower() == "#batle")
 def start_battle(message):
     if message.chat.type != "supergroup" and message.chat.type != "channel":
         return bot.reply_to(message, "❗ Bu buyruq faqat kanal yoki supergruppalarda ishlaydi.")
@@ -51,7 +51,7 @@ def start_battle(message):
     )
 
     join_btn = types.InlineKeyboardMarkup()
-    join_btn.add(types.InlineKeyboardButton("🟢 Qatnashish", callback_data="join_battle"))
+    join_btn.add(types.InlineKeyboardButton("🟢 Qo'shilish", callback_data="join_battle"))
 
     bot.send_message(message.chat.id, caption, reply_markup=join_btn, parse_mode="Markdown")
 
