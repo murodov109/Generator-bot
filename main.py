@@ -18,13 +18,12 @@ def start_message(message):
         "1️⃣ Botni kanalga admin sifatida qo‘shing.\n"
         "2️⃣ Kanalda `#batle` deb yozing.\n"
         "3️⃣ Bot avtomatik konkurs postini yuboradi.\n"
-        "4️⃣ Foydalanuvchilar 'Qo'shilish' tugmasini bossalar, "
+        "4️⃣ Foydalanuvchilar 'Qatnashish' tugmasini bossalar, "
         "bot ularning ismini kanalga chiqadi.\n\n"
-        "📜 *Postni tahrirlasangiz ham bot ishlayveradi.*\n"
+        "📜 *Post tahrir qilinsa ham bot ishlayveradi.*\n"
         "⚠️ Nakrutka, spam yoki firibgarlik aniqlansa ban qilinadi!\n\n"
         "👇 Quyidagi tugma orqali botni kanalga qo‘shing:"
     )
-
     btn = types.InlineKeyboardMarkup()
     add_channel = types.InlineKeyboardButton(
         text="➕ KANALGA QO‘SHISH", url=f"https://t.me/{bot.get_me().username}?startchannel=true"
@@ -32,13 +31,12 @@ def start_message(message):
     btn.add(add_channel)
     bot.send_message(message.chat.id, text, reply_markup=btn, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda m: m.text and m.text.lower() == "#batle")
+@bot.message_handler(func=lambda m: m.text and "#batle" in m.text.lower())
 def start_battle(message):
-    if message.chat.type != "supergroup" and message.chat.type != "channel":
-        return bot.reply_to(message, "❗ Bu buyruq faqat kanal yoki supergruppalarda ishlaydi.")
-    
+    if message.chat.type not in ["supergroup", "channel"]:
+        return
     caption = (
-        "🏆 #konkurs Boshlandi 🥳\n\n"
+        "🏆 #KONKURS BOSHLANDI 🥳\n\n"
         "📋 *Konkurs shartlari:* Kanal postini o‘qib, qatnashing!\n"
         "🎁 *Sovg‘alar:* Admin tomonidan belgilanadi.\n\n"
         "📊 Ball tizimi:\n"
@@ -49,10 +47,8 @@ def start_battle(message):
         f"👉 @{message.chat.username}\n\n"
         "Nakrutka, spam — ban ❌"
     )
-
     join_btn = types.InlineKeyboardMarkup()
-    join_btn.add(types.InlineKeyboardButton("🟢 Qo'shilish", callback_data="join_battle"))
-
+    join_btn.add(types.InlineKeyboardButton("🟢 Qatnashish", callback_data="join_battle"))
     bot.send_message(message.chat.id, caption, reply_markup=join_btn, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data == "join_battle")
